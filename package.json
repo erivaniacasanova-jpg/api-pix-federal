@@ -1,0 +1,13 @@
+{
+  "name": "api-pix-federal",
+  "version": "1.0.0",
+  "description": "API para extração de Pix Copia e Cola",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "puppeteer": "^22.6.0"
+  }
+}
