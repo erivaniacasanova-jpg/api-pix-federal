@@ -13,28 +13,30 @@ app.post('/obter-pix', async (req, res) => {
 
     console.log(`[API] Iniciando busca para o CPF: ${cpf}`);
 
-    // Inicializa o navegador com os argumentos necessários para rodar em VPS/Hospedagem Linux
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu'
-        ]
-    });
-
-    const page = await browser.newPage();
+    let browser;
     
-    // Configura o tamanho da janela simulada para não quebrar layouts responsivos
-    await page.setViewport({ width: 1280, height: 800 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
     try {
+        // Inicializa o navegador corrigido para rodar dentro de containers Linux (Railway)
+        browser = await puppeteer.launch({
+            headless: 'new', // CORREÇÃO CRÍTICA: Resolve o erro de Headless antigo da Railway
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-gpu'
+            ]
+        });
+
+        const page = await browser.newPage();
+        
+        // Configura o tamanho da janela simulada para não quebrar layouts responsivos
+        await page.setViewport({ width: 1280, height: 800 });
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
         // 1. Acessa a página inicial de boletos
         await page.goto('https://federalassociados.com.br/boletos', { waitUntil: 'networkidle2', timeout: 30000 });
         
@@ -113,7 +115,9 @@ app.post('/obter-pix', async (req, res) => {
         console.error(`[API] Erro no processamento: ${erro.message}`);
         return res.status(500).json({ sucesso: false, erro: erro.message });
     } finally {
-        await browser.close();
+        if (browser) {
+            await browser.close();
+        }
     }
 });
 
