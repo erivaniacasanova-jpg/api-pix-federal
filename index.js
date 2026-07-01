@@ -66,10 +66,10 @@ app.post('/obter-pix', async (req, res) => {
             throw new Error('Botão "Consultar" não foi localizado na página.');
         }
         
-        // CORREÇÃO: Pausa maior (7 segundos) para garantir que o AJAX da tabela carregue na Railway
+        // Pausa para garantir que o AJAX da tabela carregue
         await new Promise(resolve => setTimeout(resolve, 7000));
         
-        // 4. Localiza o botão "Pagar" (Insensível a maiúsculas/minúsculas)
+        // 4. Localiza o botão "Pagar"
         const btnPagarHandle = await page.evaluateHandle(() => {
             const elementos = Array.from(document.querySelectorAll('button, a, .btn, td'));
             return elementos.find(el => el.textContent.toUpperCase().includes('PAGAR'));
@@ -81,14 +81,15 @@ app.post('/obter-pix', async (req, res) => {
             throw new Error('Nenhuma fatura pendente localizada para este CPF após a consulta.');
         }
 
-        // Clica no botão Pagar
+        // Clica no botão Pagar para abrir o modal
         await btnPagar.click();
 
-        // 5. Aguarda o Modal carregar
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // 5. CORREÇÃO CRÍTICA: Aguarda firmemente o modal renderizar os textos internos
+        await new Promise(resolve => setTimeout(resolve, 4000)); 
         
         const btnPixHandle = await page.evaluateHandle(() => {
-            const elementos = Array.from(document.querySelectorAll('button, a, div, h3, span'));
+            // Vasculha absolutamente tudo no documento atrás da palavra Pix após a abertura
+            const elementos = Array.from(document.querySelectorAll('button, a, div, h3, span, p'));
             return elementos.find(el => {
                 const txt = el.textContent.toUpperCase();
                 return txt.includes('VER QR CODE') || txt.includes('PIX');
@@ -101,6 +102,7 @@ app.post('/obter-pix', async (req, res) => {
             throw new Error('Opção de pagamento Pix não encontrada no painel.');
         }
 
+        // Clica na opção Pix / Ver QR Code
         await btnPix.click();
         
         // 6. Extrai o código Pix Copia e Cola
