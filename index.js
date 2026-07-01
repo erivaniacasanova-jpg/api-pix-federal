@@ -16,7 +16,6 @@ app.post('/obter-pix', async (req, res) => {
     let browser;
     
     try {
-        // Inicializa o navegador em background para ambientes Linux (Railway)
         browser = await puppeteer.launch({
             headless: 'new',
             args: [
@@ -32,18 +31,14 @@ app.post('/obter-pix', async (req, res) => {
         });
 
         const page = await browser.newPage();
-        
-        // Configura o tamanho da janela simulada para evitar quebras de layout
         await page.setViewport({ width: 1280, height: 800 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        // 1. Acessa a página inicial de boletos
+        // 1. Acessa a página inicial
         await page.goto('https://federalassociados.com.br/boletos', { waitUntil: 'networkidle2', timeout: 30000 });
         
-        // 2. Limpa o campo e garante o preenchimento correto do CPF por conta da máscara do site
+        // 2. Preenche o CPF
         await page.waitForSelector('input', { timeout: 5000 });
-        
-        // Garante que o CPF use apenas números para não chocar com a máscara visual
         const cpfLimpo = cpf.replace(/\D/g, '');
         
         await page.evaluate(() => {
@@ -54,10 +49,9 @@ app.post('/obter-pix', async (req, res) => {
             }
         });
         
-        // Digita simulando o teclado humano
         await page.type('input', cpfLimpo, { delay: 100 });
         
-        // 3. Localiza e clica exatamente no botão "Consultar" pelo texto interno dele
+        // 3. Clica no botão "Consultar"
         const clicouConsultar = await page.evaluate(() => {
             const botoes = Array.from(document.querySelectorAll('button, input[type="submit"], .btn, a'));
             const btn = botoes.find(el => el.textContent.trim().includes('Consultar'));
@@ -72,41 +66,36 @@ app.post('/obter-pix', async (req, res) => {
             throw new Error('Botão "Consultar" não foi localizado na página.');
         }
         
-        // Pausa estratégica de 4 segundos: Aguarda o site processar o AJAX e montar a tabela na tela
-        await new Promise(resolve => setTimeout(resolve, 4000));
+        // CORREÇÃO: Pausa maior (7 segundos) para garantir que o AJAX da tabela carregue na Railway
+        await new Promise(resolve => setTimeout(resolve, 7000));
         
-        // 4. Localiza o botão "Pagar" dentro do resultado carregado
-        const botoesPagar = await page.$$('button, a, .btn-success');
-        let btnPagar = null;
+        // 4. Localiza o botão "Pagar" (Insensível a maiúsculas/minúsculas)
+        const btnPagarHandle = await page.evaluateHandle(() => {
+            const elementos = Array.from(document.querySelectorAll('button, a, .btn, td'));
+            return elementos.find(el => el.textContent.toUpperCase().includes('PAGAR'));
+        });
 
-        for (const b of botoesPagar) {
-            const texto = await page.evaluate(el => el.textContent, b);
-            if (texto.includes('Pagar')) {
-                btnPagar = b;
-                break;
-            }
-        }
+        const btnPagar = btnPagarHandle.asElement();
 
         if (!btnPagar) {
             throw new Error('Nenhuma fatura pendente localizada para este CPF após a consulta.');
         }
 
-        // Clica no botão Pagar para abrir o Modal de opções
+        // Clica no botão Pagar
         await btnPagar.click();
 
-        // 5. Aguarda o Modal carregar na tela
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Pausa para animação de abertura do modal
+        // 5. Aguarda o Modal carregar
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
-        const elementosModal = await page.$$('button, a, div, h3');
-        let btnPix = null;
+        const btnPixHandle = await page.evaluateHandle(() => {
+            const elementos = Array.from(document.querySelectorAll('button, a, div, h3, span'));
+            return elementos.find(el => {
+                const txt = el.textContent.toUpperCase();
+                return txt.includes('VER QR CODE') || txt.includes('PIX');
+            });
+        });
 
-        for (const el of elementosModal) {
-            const texto = await page.evaluate(el => el.textContent, el);
-            if (texto.includes('Ver QR Code') || texto.includes('Pix')) {
-                btnPix = el;
-                break;
-            }
-        }
+        const btnPix = btnPixHandle.asElement();
 
         if (!btnPix) {
             throw new Error('Opção de pagamento Pix não encontrada no painel.');
@@ -114,7 +103,7 @@ app.post('/obter-pix', async (req, res) => {
 
         await btnPix.click();
         
-        // 6. Aguarda a janela com o código Pix Copia e Cola aparecer e extrai o valor
+        // 6. Extrai o código Pix Copia e Cola
         await page.waitForSelector('textarea, input, p', { timeout: 7000 });
         
         const copiaECola = await page.evaluate(() => {
