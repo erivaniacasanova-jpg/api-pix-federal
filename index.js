@@ -84,22 +84,37 @@ app.post('/obter-pix', async (req, res) => {
         // Clica no botão Pagar para abrir o modal
         await btnPagar.click();
 
-        // 5. CORREÇÃO CRÍTICA: Aguarda firmemente o modal renderizar os textos internos
+        // 5. CORREÇÃO DO HOVER: Aguarda o modal e força o mouse a passar por cima do bloco Pix
         await new Promise(resolve => setTimeout(resolve, 4000)); 
-        
+
+        // Encontra o elemento pai/card do Pix que reage ao mouse
+        const cardPixHandle = await page.evaluateHandle(() => {
+            const divs = Array.from(document.querySelectorAll('div, h3, p'));
+            // Procura a div ou bloco que contém a palavra PIX escrita isolada
+            return divs.find(el => el.textContent.trim() === 'Pix' || el.textContent.toUpperCase().includes('SISTEMA DE PIX ON-LINE'));
+        });
+
+        const cardPix = cardPixHandle.asElement();
+
+        if (cardPix) {
+            // Move o mouse do robô para cima do card do Pix para fazer o botão verde aparecer
+            await cardPix.hover();
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Espera 1.5s para a animação do botão terminar
+        }
+
+        // Agora busca o botão verde "VER QRCODE" que acabou de aparecer com o hover
         const btnPixHandle = await page.evaluateHandle(() => {
-            // Vasculha absolutamente tudo no documento atrás da palavra Pix após a abertura
-            const elementos = Array.from(document.querySelectorAll('button, a, div, h3, span, p'));
+            const elementos = Array.from(document.querySelectorAll('button, a, div, span, p'));
             return elementos.find(el => {
                 const txt = el.textContent.toUpperCase();
-                return txt.includes('VER QR CODE') || txt.includes('PIX');
+                return txt.includes('VER QR CODE') || txt.includes('VER QRCODE');
             });
         });
 
         const btnPix = btnPixHandle.asElement();
 
         if (!btnPix) {
-            throw new Error('Opção de pagamento Pix não encontrada no painel.');
+            throw new Error('Opção de pagamento Pix não encontrada no painel após simulação de foco.');
         }
 
         // Clica na opção Pix / Ver QR Code
