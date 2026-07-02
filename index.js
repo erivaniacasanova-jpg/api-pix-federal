@@ -34,11 +34,11 @@ app.post('/obter-pix', async (req, res) => {
         await page.setViewport({ width: 1280, height: 800 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        // 1. Acessa a página inicial
-        await page.goto('https://federalassociados.com.br/boletos', { waitUntil: 'networkidle2', timeout: 30000 });
+        // CORREÇÃO CRÍTICA: ignora scripts infinitos de background e aguarda apenas o HTML estrutural carregar
+        await page.goto('https://federalassociados.com.br/boletos', { waitUntil: 'domcontentloaded', timeout: 45000 });
         
         // 2. Preenche o CPF
-        await page.waitForSelector('input', { timeout: 5000 });
+        await page.waitForSelector('input', { timeout: 10000 });
         const cpfLimpo = cpf.replace(/\D/g, '');
         
         await page.evaluate(() => {
@@ -84,29 +84,25 @@ app.post('/obter-pix', async (req, res) => {
         // Clica no botão Pagar para abrir o modal
         await btnPagar.click();
 
-        // 5. NOVA LÓGICA DO MODAL: Espera o elemento real `.card-corpo` surgir e clica nele
+        // 5. Interação com o Card do modal
         await page.waitForSelector('.card-corpo', { timeout: 8000 });
-        
-        // Clica no card para ativar o botão do Pix (simula o seu clique físico)
         await page.click('.card-corpo');
-        
-        // Aguarda 1.5s para a transição/animação do botão aparecer
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Busca o botão ativo do QR Code na tela
-        const btnPixHandle = await page.evaluateHandle(() => {
-            const elementos = Array.from(document.querySelectorAll('.card-corpo button, .card-corpo a, button, a'));
-            return elementos.find(el => el.textContent.toUpperCase().includes('QR'));
+        // Seleciona o botão interno do QR Code dentro do card ativo
+        const btnPix = await page.evaluateHandle(() => {
+            const card = document.querySelector('.card-corpo');
+            if (!card) return null;
+            return card.querySelector('a, button, .btn');
         });
 
-        const btnPix = btnPixHandle.asElement();
+        const elementoFinal = btnPix.asElement();
 
-        if (!btnPix) {
-            throw new Error('Botão VER QRCODE não ficou ativo após clicar no card.');
+        if (!elementoFinal) {
+            throw new Error('Elemento de clique do QR Code não foi encontrado dentro do card.');
         }
 
-        // Executa o clique final no botão do QR Code
-        await page.evaluate(el => el.click(), btnPix);
+        await page.evaluate(el => el.click(), elementoFinal);
         
         // 6. Extrai o código Pix Copia e Cola
         await page.waitForSelector('textarea, input, p', { timeout: 10000 });
