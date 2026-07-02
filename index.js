@@ -67,7 +67,7 @@ app.post('/obter-pix', async (req, res) => {
         }
         
         // Pausa para garantir que o AJAX da tabela carregue
-        await new Promise(resolve => setTimeout(resolve, 7000));
+        await new Promise(resolve => setTimeout(resolve, 6000));
         
         // 4. Localiza o botão "Pagar"
         const btnPagarHandle = await page.evaluateHandle(() => {
@@ -84,49 +84,28 @@ app.post('/obter-pix', async (req, res) => {
         // Clica no botão Pagar para abrir o modal
         await btnPagar.click();
 
-        // 5. CORREÇÃO RADICAL DO HOVER: Força o disparo do evento diretamente via JS em todos os blocos possíveis
-        await new Promise(resolve => setTimeout(resolve, 5000)); // 5 segundos para o modal abrir completamente
+        // 5. NOVA LÓGICA DO MODAL: Espera o elemento real `.card-corpo` surgir e clica nele
+        await page.waitForSelector('.card-corpo', { timeout: 8000 });
+        
+        // Clica no card para ativar o botão do Pix (simula o seu clique físico)
+        await page.click('.card-corpo');
+        
+        // Aguarda 1.5s para a transição/animação do botão aparecer
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
-        await page.evaluate(() => {
-            // Localiza todas as divs do modal e dispara eventos de mouseover/mouseenter simulados
-            const elementosDoModal = document.querySelectorAll('div, card, section, a, button');
-            elementosDoModal.forEach(el => {
-                if (el.textContent.toUpperCase().includes('PIX') || el.textContent.toUpperCase().includes('QR')) {
-                    // Dispara o evento de hover nativo do navegador via JS
-                    el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-                    el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-                    
-                    // Se o botão verde estiver escondido por CSS posicionado (ex: opacity: 0 ou display: none), força ele a aparecer
-                    const botoesEscondidos = el.querySelectorAll('button, a, div');
-                    botoesEscondidos.forEach(subEl => {
-                        if (subEl.textContent.toUpperCase().includes('QR') || subEl.textContent.toUpperCase().includes('CODE')) {
-                            subEl.style.display = 'block';
-                            subEl.style.opacity = '1';
-                            subEl.style.visibility = 'visible';
-                        }
-                    });
-                }
-            });
-        });
-
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Aguarda 2 segundos para o CSS processar a mudança
-
-        // Busca o botão de forma ampla (por texto contendo QR ou CODE ou PIX dentro do modal)
+        // Busca o botão ativo do QR Code na tela
         const btnPixHandle = await page.evaluateHandle(() => {
-            const elementos = Array.from(document.querySelectorAll('button, a, div, span, p'));
-            return elementos.find(el => {
-                const txt = el.textContent.toUpperCase();
-                return (txt.includes('QR') && txt.includes('CODE')) || txt.includes('VER QRCODE') || (txt.includes('PAGAR') && txt.includes('PIX'));
-            });
+            const elementos = Array.from(document.querySelectorAll('.card-corpo button, .card-corpo a, button, a'));
+            return elementos.find(el => el.textContent.toUpperCase().includes('QR'));
         });
 
         const btnPix = btnPixHandle.asElement();
 
         if (!btnPix) {
-            throw new Error('Opção de pagamento Pix não encontrada no painel após simulação de foco.');
+            throw new Error('Botão VER QRCODE não ficou ativo após clicar no card.');
         }
 
-        // Executa o clique via script nativo para ignorar bloqueios de sobreposição visual
+        // Executa o clique final no botão do QR Code
         await page.evaluate(el => el.click(), btnPix);
         
         // 6. Extrai o código Pix Copia e Cola
